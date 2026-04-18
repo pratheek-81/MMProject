@@ -47,7 +47,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"✅ Device: {device}")
 if device.type == 'cuda':
     print(f"   GPU: {torch.cuda.get_device_name(0)}")
-    print(f"   VRAM: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
+    print(f"   VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 else:
     print("   ⚠️  No GPU detected! Training will be much slower.")
     print("   → Go to Runtime → Change runtime type → GPU")
