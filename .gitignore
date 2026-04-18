@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Data & Checkpoints (too large for git)
+data/
+model/data/
+model/checkpoints/
+*.pth
+checkpoints/*.pth
+checkpoints/*.png
+
+# Uploads & Outputs (generated at runtime)
+static/uploads/
+static/outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

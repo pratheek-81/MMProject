@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Self-Supervised Mask-Based Image Reconstruction with Consistency Analysis — Upload an image, apply masking, and reconstruct with a deep learning model.">
+    <title>Masked Image Reconstruction — Self-Supervised Deep Learning</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ───────────────────────────────────────────────────── RESET & BASE */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary:    #06080f;
+            --bg-secondary:  #0d1117;
+            --bg-card:       rgba(13, 17, 30, 0.75);
+            --border-card:   rgba(99, 102, 241, 0.15);
+            --text-primary:  #e2e8f0;
+            --text-secondary:#8892a6;
+            --text-muted:    #4a5568;
+            --accent-start:  #667eea;
+            --accent-end:    #a855f7;
+            --accent-glow:   rgba(102, 126, 234, 0.25);
+            --success:       #10b981;
+            --success-dim:   rgba(16, 185, 129, 0.15);
+            --danger:        #ef4444;
+            --amber:         #f59e0b;
+            --radius:        16px;
+            --radius-sm:     10px;
+            --transition:    0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Subtle animated gradient mesh behind everything */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(102,126,234,0.08) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 60% at 80% 20%, rgba(168,85,247,0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 70% at 50% 90%, rgba(16,185,129,0.04) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ───────────────────────────────────────────────────── LAYOUT WRAPPER */
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px 80px;
+        }
+
+        /* ───────────────────────────────────────────────────── HEADER / HERO */
+        header {
+            text-align: center;
+            padding: 60px 0 40px;
+        }
+
+        .logo-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 6px 16px;
+            border-radius: 50px;
+            margin-bottom: 20px;
+        }
+        .logo-badge svg {
+            width: 14px; height: 14px; fill: currentColor;
+        }
+
+        h1 {
+            font-size: clamp(1.75rem, 4vw, 2.75rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, #e2e8f0, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+            margin-bottom: 12px;
+        }
+
+        header p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        .resolution-badge {
+            display: inline-block;
+            background: var(--success-dim);
+            color: var(--success);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 50px;
+            margin-top: 12px;
+        }
+
+        /* ───────────────────────────────────────────────────── GLASS CARD */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 32px;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .card:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        /* ───────────────────────────────────────────────────── UPLOAD SECTION */
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        @media (max-width: 768px) {
+            .upload-section { grid-template-columns: 1fr; }
+        }
+
+        /* Drop zone */
+        .dropzone {
+            border: 2px dashed rgba(99, 102, 241, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        .dropzone:hover,
+        .dropzone.dragover {
+            border-color: var(--accent-start);
+            background: rgba(99, 102, 241, 0.06);
+        }
+
+        .dropzone-icon {
+            width: 48px; height: 48px;
+            margin: 0 auto 16px;
+            stroke: var(--accent-start);
+            fill: none;
+            stroke-width: 1.5;
+        }
+
+        .dropzone h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .dropzone .hint {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .dropzone input[type=file] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Preview thumbnail */
+        #previewContainer {
+            display: none; /* shown via JS */
+            margin-top: 16px;
+        }
+        #previewContainer img {
+            max-width: 220px;
+            max-height: 220px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-card);
+            object-fit: contain;
+        }
+        #fileName {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+
+        /* Controls card */
+        .controls-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 28px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        /* Custom range slider */
+        .range-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--accent-start), var(--accent-end));
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 8px rgba(102,126,234,0.5);
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px; height: 20px;
+            border: none;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 8px rgba(102,126,234,0.5);
+            cursor: pointer;
+        }
+
+        .range-value {
+            min-width: 52px;
+            text-align: center;
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Submit button */
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            color: #fff;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 14px 32px;
+            cursor: pointer;
+            transition: var(--transition);
+            letter-spacing: 0.3px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(102,126,234,0.35);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-primary svg {
+            width: 18px; height: 18px; fill: currentColor;
+        }
+
+        /* ───────────────────────────────────────────────────── LOADING */
+        .loading-overlay {
+            display: none; /* toggled via JS */
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(6, 8, 15, 0.85);
+            backdrop-filter: blur(6px);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .loading-overlay.active { display: flex; }
+
+        .spinner {
+            width: 52px; height: 52px;
+            border: 3px solid rgba(102,126,234,0.15);
+            border-top-color: var(--accent-start);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-overlay p {
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        /* ───────────────────────────────────────────────────── RESULTS */
+        .results-section {
+            display: none; /* shown after response */
+            animation: fadeUp 0.5s ease-out;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        /* Metrics row */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .metric-card {
+            text-align: center;
+            padding: 24px 16px;
+        }
+
+        .metric-value {
+            display: block;
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 4px;
+        }
+
+        .metric-value.success-gradient {
+            background: linear-gradient(135deg, var(--success), #34d399);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Sub-section titles */
+        .sub-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin: 28px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-card);
+        }
+
+        /* Image grid */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .image-card {
+            overflow: hidden;
+            padding: 0;
+            transition: transform var(--transition), box-shadow var(--transition);
+        }
+        .image-card:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 12px 40px rgba(102,126,234,0.18);
+        }
+
+        .image-card img {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: contain;
+            background: #0a0c14;
+            display: block;
+            /* Crisp rendering for small model outputs */
+            image-rendering: auto;
+            -webkit-image-rendering: auto;
+        }
+
+        .image-card .caption {
+            padding: 14px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-card);
+        }
+
+        .image-card .caption .badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .badge-best {
+            background: var(--success-dim);
+            color: var(--success);
+        }
+        .badge-model {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-start);
+        }
+
+        /* ───────────────────────────────────────────────────── ERROR TOAST */
+        .toast {
+            display: none;
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            background: var(--danger);
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 8px 30px rgba(239,68,68,0.3);
+            animation: toastIn 0.3s ease;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* ───────────────────────────────────────────────────── FOOTER */
+        footer {
+            text-align: center;
+            padding: 40px 0 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        footer a {
+            color: var(--accent-start);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+    <!-- ════════════════════════════════════════════════════ HEADER -->
+    <header>
+        <div class="logo-badge">
+            <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Self-Supervised Reconstruction
+        </div>
+        <h1>Masked Image Reconstruction<br>with Consistency Analysis</h1>
+        <p>Upload an image, choose a masking ratio, and let the deep learning model reconstruct hidden regions. Then inspect quality metrics and error heatmaps.</p>
+        <div class="resolution-badge">✨ 128×128 — High Quality Model</div>
+    </header>
+
+    <!-- ════════════════════════════════════════════════════ UPLOAD -->
+    <div class="upload-section">
+
+        <!-- Drop zone card -->
+        <div class="card" id="uploadCard">
+            <div class="dropzone" id="dropzone">
+                <svg class="dropzone-icon" viewBox="0 0 24 24">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <h3>Drop an image here</h3>
+                <p class="hint">or click to browse &nbsp;·&nbsp; JPG, PNG, BMP, WebP</p>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+            <div id="previewContainer">
+                <img id="previewImg" alt="Preview">
+                <p id="fileName"></p>
+            </div>
+        </div>
+
+        <!-- Controls card -->
+        <div class="card controls-card">
+            <div class="control-group">
+                <label for="maskRatio">Mask Ratio</label>
+                <div class="range-wrapper">
+                    <input type="range" id="maskRatio" min="10" max="90" value="50" step="5">
+                    <span class="range-value" id="maskRatioValue">50%</span>
+                </div>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                    Percentage of image patches hidden from the model.
+                </p>
+            </div>
+
+            <button class="btn-primary" id="reconstructBtn" disabled>
+                <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Reconstruct Image
+            </button>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════ RESULTS -->
+    <section class="results-section" id="resultsSection">
+
+        <div class="section-title"><span class="dot"></span> Reconstruction Results</div>
+
+        <!-- Metrics -->
+        <div class="metrics-row">
+            <div class="card metric-card">
+                <span class="metric-value" id="psnrValue">—</span>
+                <span class="metric-label">PSNR (Raw)</span>
+                <span class="metric-desc">Model output vs original (dB)</span>
+            </div>
+            <div class="card metric-card">
+                <span class="metric-value" id="ssimValue">—</span>
+                <span class="metric-label">SSIM (Raw)</span>
+                <span class="metric-desc">Structural similarity</span>
+            </div>
+            <div class="card metric-card">
+                <span class="metric-value success-gradient" id="psnrBlendedValue">—</span>
+                <span class="metric-label">PSNR (Blended)</span>
+                <span class="metric-desc">Smart blend vs original (dB)</span>
+            </div>
+            <div class="card metric-card">
+                <span class="metric-value success-gradient" id="ssimBlendedValue">—</span>
+                <span class="metric-label">SSIM (Blended)</span>
+                <span class="metric-desc">Blended structural similarity</span>
+            </div>
+            <div class="card metric-card">
+                <span class="metric-value" id="maskRatioResult">—</span>
+                <span class="metric-label">Mask Ratio</span>
+                <span class="metric-desc">Fraction of patches masked</span>
+            </div>
+        </div>
+
+        <!-- Original uploaded image -->
+        <div class="sub-title">📷 Uploaded Image (Original Resolution)</div>
+        <div class="image-grid" style="grid-template-columns: 1fr; max-width: 400px;">
+            <div class="card image-card">
+                <img id="originalImg" alt="Original uploaded image">
+                <div class="caption">Your Uploaded Image</div>
+            </div>
+        </div>
+
+        <!-- Model pipeline images -->
+        <div class="sub-title">🔬 Model Pipeline (128×128)</div>
+        <div class="image-grid">
+            <div class="card image-card">
+                <img id="modelInputImg" alt="Model input (resized)">
+                <div class="caption">Model Input <span class="badge badge-model">128×128</span></div>
+            </div>
+            <div class="card image-card">
+                <img id="maskVisImg" alt="Mask visualization">
+                <div class="caption">Mask Visualization</div>
+            </div>
+            <div class="card image-card">
+                <img id="maskedImg" alt="Masked image">
+                <div class="caption">Masked Input</div>
+            </div>
+            <div class="card image-card">
+                <img id="reconstructedImg" alt="Reconstructed image">
+                <div class="caption">Reconstructed (Raw)</div>
+            </div>
+            <div class="card image-card">
+                <img id="blendedImg" alt="Blended result">
+                <div class="caption">Blended Result <span class="badge badge-best">BEST</span></div>
+            </div>
+            <div class="card image-card">
+                <img id="heatmapImg" alt="Error heatmap">
+                <div class="caption">Error Heatmap</div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <p>Running reconstruction…</p>
+</div>
+
+<!-- Error toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Footer -->
+<footer>
+    Self-Supervised Mask-Based Image Reconstruction &middot; Built with PyTorch &amp; Flask
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════ JAVASCRIPT -->
+<script>
+(function () {
+    'use strict';
+
+    // DOM refs
+    const fileInput        = document.getElementById('fileInput');
+    const dropzone         = document.getElementById('dropzone');
+    const previewContainer = document.getElementById('previewContainer');
+    const previewImg       = document.getElementById('previewImg');
+    const fileNameEl       = document.getElementById('fileName');
+    const maskRatio        = document.getElementById('maskRatio');
+    const maskRatioValue   = document.getElementById('maskRatioValue');
+    const reconstructBtn   = document.getElementById('reconstructBtn');
+    const loadingOverlay   = document.getElementById('loadingOverlay');
+    const resultsSection   = document.getElementById('resultsSection');
+    const toast            = document.getElementById('toast');
+
+    let selectedFile = null;
+
+    // ── Mask-ratio slider ───────────────────────────────────────────────
+    maskRatio.addEventListener('input', () => {
+        maskRatioValue.textContent = maskRatio.value + '%';
+    });
+
+    // ── File selection ──────────────────────────────────────────────────
+    fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+    // Drag-and-drop
+    ['dragenter', 'dragover'].forEach(evt =>
+        dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); })
+    );
+    ['dragleave', 'drop'].forEach(evt =>
+        dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+    );
+    dropzone.addEventListener('drop', e => {
+        const files = e.dataTransfer.files;
+        if (files.length) handleFile(files[0]);
+    });
+
+    function handleFile(file) {
+        if (!file || !file.type.startsWith('image/')) {
+            showToast('Please select a valid image file.');
+            return;
+        }
+        selectedFile = file;
+        fileNameEl.textContent = file.name;
+        previewContainer.style.display = 'block';
+        reconstructBtn.disabled = false;
+
+        const reader = new FileReader();
+        reader.onload = e => { previewImg.src = e.target.result; };
+        reader.readAsDataURL(file);
+    }
+
+    // ── Reconstruct button ──────────────────────────────────────────────
+    reconstructBtn.addEventListener('click', async () => {
+        if (!selectedFile) return;
+
+        loadingOverlay.classList.add('active');
+        reconstructBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+        formData.append('mask_ratio', (parseInt(maskRatio.value, 10) / 100).toFixed(2));
+
+        try {
+            const resp = await fetch('/reconstruct', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (!resp.ok || data.error) {
+                showToast(data.error || 'Server error.');
+                return;
+            }
+
+            // Populate metrics
+            document.getElementById('psnrValue').textContent        = data.psnr + ' dB';
+            document.getElementById('ssimValue').textContent        = data.ssim;
+            document.getElementById('psnrBlendedValue').textContent = data.psnr_blended + ' dB';
+            document.getElementById('ssimBlendedValue').textContent = data.ssim_blended;
+            document.getElementById('maskRatioResult').textContent  = Math.round(data.mask_ratio * 100) + '%';
+
+            // Append cache-buster to image URLs
+            const cb = '?t=' + Date.now();
+            document.getElementById('originalImg').src      = data.original + cb;
+            document.getElementById('modelInputImg').src    = data.model_input + cb;
+            document.getElementById('maskedImg').src        = data.masked + cb;
+            document.getElementById('reconstructedImg').src = data.reconstructed + cb;
+            document.getElementById('blendedImg').src       = data.blended + cb;
+            document.getElementById('heatmapImg').src       = data.heatmap + cb;
+            document.getElementById('maskVisImg').src       = data.mask_visualization + cb;
+
+            resultsSection.style.display = 'block';
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        } catch (err) {
+            showToast('Network error — is the server running?');
+            console.error(err);
+        } finally {
+            loadingOverlay.classList.remove('active');
+            reconstructBtn.disabled = false;
+        }
+    });
+
+    // ── Toast helper ────────────────────────────────────────────────────
+    function showToast(msg) {
+        toast.textContent = msg;
+        toast.style.display = 'block';
+        setTimeout(() => { toast.style.display = 'none'; }, 4000);
+    }
+})();
+</script>
+
+</body>
+</html>
